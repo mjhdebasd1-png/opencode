@@ -5,6 +5,7 @@ const STORAGE_KEY = "opencode-web:sessions:v1"
 const THEME_KEY = "opencode-web:theme:v1"
 const MODEL_KEY = "opencode-web:model:v1"
 const MODELS_KEY = "opencode-web:models:v1"
+const SKILLS_KEY = "opencode-web:skills:v1"
 
 const FREE_MODELS = new Set([
   "cohere/north-mini-code:free",
@@ -75,8 +76,11 @@ const modelListEl = document.querySelector("#modelList")
 const addModelForm = document.querySelector("#addModelForm")
 const newModelInput = document.querySelector("#newModelInput")
 const resetModelsBtn = document.querySelector("#resetModels")
+const skillListEl = document.querySelector("#skillList")
 
 let sessions = loadSessions()
+let skills = loadSkills()
+let skillMetadata = []
 let currentId = null
 let streaming = false
 let controller = null
@@ -94,6 +98,7 @@ function init() {
   renderMessages()
   bindEvents()
   checkHealth()
+  loadSkillMetadata()
   input.focus()
 }
 
@@ -373,7 +378,7 @@ async function* streamChat(messages, model, signal) {
   const response = await fetch("/api/chat", {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ messages, model }),
+    body: JSON.stringify({ messages, model, skills }),
     signal,
   })
 
@@ -699,6 +704,77 @@ function resetModels() {
   localStorage.removeItem(MODEL_KEY)
   renderModelSelect()
   renderModelList()
+}
+
+function loadSkills() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(SKILLS_KEY) || "[]")
+    return Array.isArray(parsed) ? parsed.filter((id) => typeof id === "string") : []
+  } catch {
+    return []
+  }
+}
+
+function saveSkills() {
+  localStorage.setItem(SKILLS_KEY, JSON.stringify(skills))
+}
+
+async function loadSkillMetadata() {
+  try {
+    const data = await (await fetch("/api/skills")).json()
+    skillMetadata = Array.isArray(data.skills) ? data.skills : []
+  } catch {
+    skillMetadata = []
+  }
+  renderSkillList()
+}
+
+function renderSkillList() {
+  skillListEl.innerHTML = ""
+
+  if (skillMetadata.length === 0) {
+    const empty = document.createElement("p")
+    empty.className = "settings-hint"
+    empty.textContent = "No skills found. Run node scripts/fetch-skills.mjs to download them."
+    skillListEl.appendChild(empty)
+    return
+  }
+
+  for (const skill of skillMetadata) {
+    const row = document.createElement("label")
+    row.className = "skill-row"
+
+    const checkbox = document.createElement("input")
+    checkbox.type = "checkbox"
+    checkbox.className = "skill-checkbox"
+    checkbox.checked = skills.includes(skill.id)
+    checkbox.addEventListener("change", () => toggleSkill(skill.id, checkbox.checked))
+
+    const info = document.createElement("span")
+    info.className = "skill-info"
+
+    const name = document.createElement("span")
+    name.className = "skill-name"
+    name.textContent = skill.name || skill.id
+
+    const desc = document.createElement("span")
+    desc.className = "skill-desc"
+    const size = `${Math.max(1, Math.round(skill.size / 1024))} KB`
+    desc.textContent = skill.description ? `${skill.description} · ${size}` : size
+
+    info.append(name, desc)
+    row.append(checkbox, info)
+    skillListEl.appendChild(row)
+  }
+}
+
+function toggleSkill(id, enabled) {
+  if (enabled) {
+    if (!skills.includes(id)) skills.push(id)
+  } else {
+    skills = skills.filter((skillId) => skillId !== id)
+  }
+  saveSkills()
 }
 
 async function checkHealth() {

@@ -1,3 +1,6 @@
+import { readFileSync, readdirSync, existsSync } from "node:fs"
+import path from "node:path"
+
 const DEFAULT_BASE_URL = "https://openrouter.ai/api/v1"
 const DEFAULT_MODEL = "openai/gpt-4o-mini"
 
@@ -9,12 +12,14 @@ const SYSTEM_PROMPT =
   "before writing a full solution."
 
 const MAX_BODY_BYTES = 1_000_000
+const SKILLS_DIR = path.resolve(process.cwd(), "skills")
 
 export function apiMiddleware(req, res, next) {
-  const path = new URL(req.url, "http://localhost").pathname
+  const urlPath = new URL(req.url, "http://localhost").pathname
 
-  if (path === "/api/health") return handleHealth(req, res)
-  if (path === "/api/chat") return handleChat(req, res)
+  if (urlPath === "/api/health") return handleHealth(req, res)
+  if (urlPath === "/api/skills") return handleSkills(req, res)
+  if (urlPath === "/api/chat") return handleChat(req, res)
 
   next()
 }
@@ -28,6 +33,11 @@ function handleHealth(req, res) {
     model: process.env.OPENAI_MODEL || DEFAULT_MODEL,
     provider: process.env.OPENAI_BASE_URL || DEFAULT_BASE_URL,
   })
+}
+
+function handleSkills(req, res) {
+  if (req.method !== "GET") return sendJson(res, 405, { error: "Method not allowed" })
+  sendJson(res, 200, { skills: listSkills() })
 }
 
 async function handleChat(req, res) {
@@ -44,9 +54,12 @@ async function handleChat(req, res) {
   const messages = Array.isArray(body?.messages) ? body.messages : []
   if (messages.length === 0) return sendJson(res, 400, { error: "messages must be a non-empty array." })
 
+  const skillsText = loadSkillsText(body.skills)
+  const systemContent = SYSTEM_PROMPT + (skillsText ? `\n\n${skillsText}` : "")
+
   const finalMessages = messages.some((message) => message.role === "system")
     ? messages
-    : [{ role: "system", content: SYSTEM_PROMPT }, ...messages]
+    : [{ role: "system", content: systemContent }, ...messages]
 
   const baseUrl = (body.baseUrl || process.env.OPENAI_BASE_URL || DEFAULT_BASE_URL).replace(/\/+$/, "")
   const model = body.model || process.env.OPENAI_MODEL || DEFAULT_MODEL
@@ -112,6 +125,64 @@ async function handleChat(req, res) {
     res.end()
   }
 }
+
+/* ---------- Skills ---------- */
+
+function listSkills() {
+  if (!existsSync(SKILLS_DIR)) return []
+
+  return readdirSync(SKILLS_DIR)
+    .filter((file) => file.endsWith(".md"))
+    .map((file) => {
+      const id = file.replace(/\.md$/, "")
+      const raw = readFileSync(path.join(SKILLS_DIR, file), "utf8")
+      const meta = parseFrontmatter(raw)
+      return {
+        id,
+        name: meta.name || id,
+        description: meta.description || "",
+        size: raw.length,
+      }
+    })
+    .sort((a, b) => a.name.localeCompare(b.name))
+}
+
+function loadSkillsText(skillIds) {
+  if (!Array.isArray(skillIds) || skillIds.length === 0) return ""
+
+  const bodies = []
+  for (const id of skillIds) {
+    if (typeof id !== "string" || !/^[a-z0-9-_]+$/i.test(id)) continue
+    const file = path.join(SKILLS_DIR, `${id}.md`)
+    if (!existsSync(file)) continue
+    bodies.push(stripFrontmatter(readFileSync(file, "utf8")))
+  }
+
+  if (bodies.length === 0) return ""
+
+  return (
+    "The following design skills are enabled for this conversation. " +
+    "Follow the relevant instructions from each skill when they apply to the task.\n\n" +
+    bodies.map((body) => `<skill>\n${body}\n</skill>`).join("\n\n")
+  )
+}
+
+function parseFrontmatter(raw) {
+  const match = raw.match(/^---\n([\s\S]*?)\n---/)
+  if (!match) return {}
+  const meta = {}
+  for (const line of match[1].split("\n")) {
+    const entry = line.match(/^([\w-]+):\s*(.*)$/)
+    if (entry) meta[entry[1]] = entry[2].trim()
+  }
+  return meta
+}
+
+function stripFrontmatter(raw) {
+  return raw.replace(/^---\n[\s\S]*?\n---\n?/, "").trim()
+}
+
+/* ---------- Helpers ---------- */
 
 function readJson(req) {
   return new Promise((resolve, reject) => {
