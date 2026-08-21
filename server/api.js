@@ -1,6 +1,13 @@
 const DEFAULT_BASE_URL = "https://openrouter.ai/api/v1"
 const DEFAULT_MODEL = "openai/gpt-4o-mini"
 
+const SYSTEM_PROMPT =
+  "You are opencode, a concise, expert AI coding assistant running in the browser. " +
+  "Write clean, correct, well-explained code. " +
+  "When a request is ambiguous, missing key details, or could go several ways, " +
+  "ask a few short, specific clarifying questions (one per line, each ending with a question mark) " +
+  "before writing a full solution."
+
 const MAX_BODY_BYTES = 1_000_000
 
 export function apiMiddleware(req, res, next) {
@@ -37,6 +44,10 @@ async function handleChat(req, res) {
   const messages = Array.isArray(body?.messages) ? body.messages : []
   if (messages.length === 0) return sendJson(res, 400, { error: "messages must be a non-empty array." })
 
+  const finalMessages = messages.some((message) => message.role === "system")
+    ? messages
+    : [{ role: "system", content: SYSTEM_PROMPT }, ...messages]
+
   const baseUrl = (body.baseUrl || process.env.OPENAI_BASE_URL || DEFAULT_BASE_URL).replace(/\/+$/, "")
   const model = body.model || process.env.OPENAI_MODEL || DEFAULT_MODEL
 
@@ -46,7 +57,7 @@ async function handleChat(req, res) {
       "content-type": "application/json",
       authorization: `Bearer ${apiKey}`,
     },
-    body: JSON.stringify({ model, messages, stream: true }),
+    body: JSON.stringify({ model, messages: finalMessages, stream: true }),
   }).catch((error) => null)
 
   if (!upstream) {

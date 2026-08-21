@@ -122,7 +122,10 @@ function renderCodeBlock({ lang, code }) {
   return `<div class="code-block">
     <div class="code-head">
       <span class="code-lang">${escapeHtml(lang || "code")}</span>
-      <button class="code-copy" type="button">Copy</button>
+      <div class="code-actions">
+        <button class="code-preview" type="button">Preview</button>
+        <button class="code-copy" type="button">Copy</button>
+      </div>
     </div>
     <pre><code class="hl">${highlight(code, lang)}</code></pre>
   </div>`

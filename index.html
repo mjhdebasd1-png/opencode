@@ -96,7 +96,15 @@
       <main class="main">
         <header class="topbar">
           <h1 id="sessionTitle" class="session-title">New conversation</h1>
-          <span id="modelBadge" class="badge">connecting…</span>
+          <div class="topbar-actions">
+            <span id="thinking" class="thinking" hidden>Thinking…</span>
+            <select id="modelSelect" class="model-select" title="Model" aria-label="Model"></select>
+            <button id="regenerate" class="icon-btn" type="button" title="Regenerate last response" aria-label="Regenerate last response" disabled>
+              <svg viewBox="0 0 16 16" aria-hidden="true">
+                <path d="M13.5 8a5.5 5.5 0 1 1-1.6-3.9M13.5 1.5v3h-3" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
+              </svg>
+            </button>
+          </div>
         </header>
 
         <section id="messages" class="messages" aria-live="polite">

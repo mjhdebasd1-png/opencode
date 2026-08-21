@@ -3,6 +3,17 @@ import { renderMarkdown } from "./markdown.js"
 
 const STORAGE_KEY = "opencode-web:sessions:v1"
 const THEME_KEY = "opencode-web:theme:v1"
+const MODEL_KEY = "opencode-web:model:v1"
+
+const MODELS = [
+  "openai/gpt-4o-mini",
+  "openai/gpt-4o",
+  "anthropic/claude-3.5-sonnet",
+  "anthropic/claude-3-5-haiku",
+  "google/gemini-2.0-flash-001",
+  "deepseek/deepseek-chat",
+  "meta-llama/llama-3.3-70b-instruct",
+]
 
 const botIcon = `<svg viewBox="0 0 32 32" fill="none"><rect width="32" height="32" rx="8" fill="currentColor" opacity="0.1"/><path d="M9 12l4 4-4 4" stroke="var(--accent)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M16 20h7" stroke="var(--gold)" stroke-width="2.5" stroke-linecap="round"/></svg>`
 const userIcon = `<svg viewBox="0 0 16 16" fill="none"><circle cx="8" cy="5.5" r="2.6" fill="currentColor"/><path d="M3.5 13.5a4.5 4.5 0 0 1 9 0" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>`
@@ -20,7 +31,9 @@ const clearAllBtn = document.querySelector("#clearAll")
 const statusDot = document.querySelector("#statusDot")
 const statusText = document.querySelector("#statusText")
 const sessionTitle = document.querySelector("#sessionTitle")
-const modelBadge = document.querySelector("#modelBadge")
+const modelSelect = document.querySelector("#modelSelect")
+const regenerateBtn = document.querySelector("#regenerate")
+const thinking = document.querySelector("#thinking")
 const setupBanner = document.querySelector("#setupBanner")
 
 let sessions = loadSessions()
@@ -32,6 +45,7 @@ init()
 
 function init() {
   applyTheme(localStorage.getItem(THEME_KEY) || (matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark"))
+  initModelSelect()
 
   if (sessions.length === 0) sessions = [createSession()]
   currentId = sessions[0].id
@@ -46,6 +60,7 @@ function init() {
 function bindEvents() {
   sendBtn.addEventListener("click", () => sendMessage(input.value))
   newChatBtn.addEventListener("click", () => selectSession(createSession().id))
+  regenerateBtn.addEventListener("click", regenerate)
   themeToggle.addEventListener("click", () => {
     const next = document.documentElement.dataset.theme === "light" ? "dark" : "light"
     applyTheme(next)
@@ -59,6 +74,9 @@ function bindEvents() {
     renderMessages()
   })
   stopBtn.addEventListener("click", () => controller?.abort())
+  modelSelect.addEventListener("change", () => {
+    localStorage.setItem(MODEL_KEY, modelSelect.value)
+  })
 
   input.addEventListener("input", () => {
     resizeInput()
@@ -72,18 +90,23 @@ function bindEvents() {
     }
   })
 
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "/" && !isEditable(document.activeElement)) {
+      event.preventDefault()
+      input.focus()
+    }
+  })
+
   document.querySelectorAll(".suggestion").forEach((button) => {
     button.addEventListener("click", () => sendMessage(button.dataset.prompt))
   })
 
   messagesEl.addEventListener("click", (event) => {
     const copyButton = event.target.closest(".code-copy")
-    if (!copyButton) return
-    const code = copyButton.closest(".code-block")?.querySelector("code")?.textContent ?? ""
-    navigator.clipboard.writeText(code).then(() => {
-      copyButton.textContent = "Copied!"
-      setTimeout(() => (copyButton.textContent = "Copy"), 1500)
-    })
+    if (copyButton) return copyCode(copyButton)
+
+    const previewButton = event.target.closest(".code-preview")
+    if (previewButton) return togglePreview(previewButton)
   })
 }
 
@@ -170,6 +193,7 @@ function renderMessages() {
     if (!message.content) continue
     messagesEl.appendChild(renderMessage(message))
   }
+  regenerateBtn.disabled = !canRegenerate()
   scrollToBottom(true)
 }
 
@@ -226,6 +250,10 @@ async function sendMessage(text) {
   renderSidebar()
   renderMessages()
 
+  await runAssistantTurn(session)
+}
+
+async function runAssistantTurn(session) {
   const assistant = { role: "assistant", content: "", time: Date.now() }
   session.messages.push(assistant)
 
@@ -243,7 +271,7 @@ async function sendMessage(text) {
     .map((message) => ({ role: message.role, content: message.content }))
 
   try {
-    for await (const event of streamChat(history, controller.signal)) {
+    for await (const event of streamChat(history, currentModel(), controller.signal)) {
       if (event.text) {
         assistant.content += event.text
         markdown.innerHTML = renderMarkdown(assistant.content)
@@ -268,18 +296,33 @@ async function sendMessage(text) {
     if (!assistant.content) {
       session.messages.pop()
       node.remove()
+    } else if (node.isConnected) {
+      renderQuestions(node, extractQuestions(assistant.content))
     }
     saveSessions()
     renderSidebar()
+    regenerateBtn.disabled = !canRegenerate()
     scrollToBottom(false)
   }
 }
 
-async function* streamChat(messages, signal) {
+async function regenerate() {
+  if (streaming) return
+  const session = currentSession()
+  const last = session?.messages[session.messages.length - 1]
+  if (!last || last.role !== "assistant") return
+
+  session.messages.pop()
+  saveSessions()
+  renderMessages()
+  await runAssistantTurn(session)
+}
+
+async function* streamChat(messages, model, signal) {
   const response = await fetch("/api/chat", {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ messages }),
+    body: JSON.stringify({ messages, model }),
     signal,
   })
 
@@ -319,6 +362,171 @@ function setStreaming(active) {
   streaming = active
   sendBtn.classList.toggle("hidden", active)
   stopBtn.hidden = !active
+  thinking.hidden = !active
+  regenerateBtn.disabled = active || !canRegenerate()
+}
+
+function canRegenerate() {
+  const session = currentSession()
+  const last = session?.messages[session.messages.length - 1]
+  return Boolean(last && last.role === "assistant")
+}
+
+/* ---------- Code preview ---------- */
+
+function copyCode(button) {
+  const code = button.closest(".code-block")?.querySelector("code")?.textContent ?? ""
+  navigator.clipboard.writeText(code).then(() => {
+    button.textContent = "Copied!"
+    setTimeout(() => (button.textContent = "Copy"), 1500)
+  })
+}
+
+function togglePreview(button) {
+  const block = button.closest(".code-block")
+  const existing = block.nextElementSibling
+  if (existing?.classList.contains("preview-pane")) {
+    existing.remove()
+    button.textContent = "Preview"
+    return
+  }
+
+  const lang = block.querySelector(".code-lang")?.textContent ?? ""
+  const code = block.querySelector("code")?.textContent ?? ""
+  const doc = buildPreviewDoc(code, lang)
+
+  const pane = document.createElement("div")
+  pane.className = "preview-pane"
+
+  if (doc == null) {
+    pane.innerHTML = `<div class="preview-empty">Preview isn't available for ${escapeHtml(lang) || "this"} code.</div>`
+  } else {
+    const iframe = document.createElement("iframe")
+    iframe.className = "preview-frame"
+    iframe.sandbox = "allow-scripts"
+    iframe.srcdoc = doc
+    iframe.title = "Code preview"
+    pane.appendChild(iframe)
+  }
+
+  block.insertAdjacentElement("afterend", pane)
+  button.textContent = "Hide"
+}
+
+function buildPreviewDoc(code, lang) {
+  const language = (lang || "").toLowerCase()
+
+  if (["html", "htm", "svg", "xml"].includes(language)) return code
+
+  if (language === "css") {
+    return `<!doctype html><html><head><meta charset="utf-8"><style>${code}</style></head><body>
+<div style="padding:20px;font-family:system-ui,sans-serif"><h1>Heading</h1><p>A paragraph with a <a href="#">link</a> and <strong>strong</strong> text.</p><button>Button</button><div class="card">Card</div><input placeholder="Input"></div></body></html>`
+  }
+
+  if (["js", "javascript", "mjs", "jsx"].includes(language)) {
+    const safe = code.replace(/<\/script>/gi, "<\\/script>")
+    return `<!doctype html><html><head><meta charset="utf-8"><style>body{font-family:ui-monospace,monospace;padding:16px;background:#0c0e12;color:#d7dce4;white-space:pre-wrap}</style></head><body><script>
+const __out = [];
+const __log = console.log;
+console.log = (...a) => { __out.push(a.map(v => typeof v === "object" ? JSON.stringify(v) : String(v)).join(" ")); __log(...a); };
+try {
+${safe}
+} catch (e) {
+  document.body.insertAdjacentHTML("beforeend", '<div style="color:#f87171;margin-top:12px">' + e.name + ': ' + e.message + '</div>');
+}
+if (__out.length) document.body.insertAdjacentHTML("beforeend", '<div style="color:#7ee0a3;border-top:1px solid #262c36;margin-top:12px;padding-top:12px">' + __out.join("\\n").replace(/&/g,"&amp;").replace(/</g,"&lt;") + '</div>');
+<\/script></body></html>`
+  }
+
+  if (["md", "markdown"].includes(language)) {
+    return `<!doctype html><html><head><meta charset="utf-8"><style>body{font-family:system-ui,sans-serif;padding:20px;max-width:760px;margin:0 auto;background:#0c0e12;color:#e8eaee;line-height:1.6}pre{background:#13161c;padding:12px;border-radius:8px;overflow:auto}code{font-family:ui-monospace,monospace}h1,h2,h3{line-height:1.2}</style></head><body>${renderMarkdown(code)}</body></html>`
+  }
+
+  return null
+}
+
+/* ---------- Clarifying questions ---------- */
+
+function extractQuestions(text) {
+  const withoutCode = String(text).replace(/```[\s\S]*?```/g, "")
+  const questions = []
+
+  for (const line of withoutCode.split("\n")) {
+    const trimmed = line.trim().replace(/^\d+[.)]\s*/, "").replace(/^[-*+]\s*/, "")
+    if (
+      trimmed.endsWith("?") &&
+      trimmed.length > 8 &&
+      trimmed.length < 300 &&
+      !/^[#>]/.test(trimmed)
+    ) {
+      questions.push(trimmed)
+    }
+  }
+  return questions.slice(0, 3)
+}
+
+function renderQuestions(node, questions) {
+  if (questions.length === 0) return
+
+  const body = node.querySelector(".msg-body")
+  const panel = document.createElement("div")
+  panel.className = "question-panel"
+
+  const heading = document.createElement("div")
+  heading.className = "question-heading"
+  heading.textContent = "Clarify to continue"
+  panel.appendChild(heading)
+
+  const form = document.createElement("form")
+  form.className = "question-form"
+
+  for (const question of questions) {
+    const field = document.createElement("div")
+    field.className = "question-field"
+
+    const label = document.createElement("label")
+    label.textContent = question
+
+    const answer = document.createElement("input")
+    answer.type = "text"
+    answer.placeholder = "Your answer…"
+    answer.dataset.question = question
+
+    field.append(label, answer)
+    form.appendChild(field)
+  }
+
+  const actions = document.createElement("div")
+  actions.className = "question-actions"
+
+  const submit = document.createElement("button")
+  submit.type = "submit"
+  submit.className = "question-submit"
+  submit.textContent = "Send answers"
+
+  const skip = document.createElement("button")
+  skip.type = "button"
+  skip.className = "question-skip"
+  skip.textContent = "Skip"
+  skip.addEventListener("click", () => panel.remove())
+
+  actions.append(submit, skip)
+  form.appendChild(actions)
+
+  form.addEventListener("submit", (event) => {
+    event.preventDefault()
+    const answers = [...form.querySelectorAll("input")]
+      .map((field) => ({ question: field.dataset.question, answer: field.value.trim() }))
+      .filter((entry) => entry.answer)
+
+    if (answers.length === 0) return
+    const text = answers.map((entry) => `**${entry.question}**\n${entry.answer}`).join("\n\n")
+    panel.remove()
+    sendMessage(text)
+  })
+
+  panel.appendChild(form)
+  body.appendChild(panel)
 }
 
 /* ---------- Theme & status ---------- */
@@ -328,10 +536,39 @@ function applyTheme(theme) {
   localStorage.setItem(THEME_KEY, theme)
 }
 
+function initModelSelect() {
+  const options = new Set(MODELS)
+  const saved = localStorage.getItem(MODEL_KEY)
+  if (saved) options.add(saved)
+
+  for (const model of options) {
+    const option = document.createElement("option")
+    option.value = model
+    option.textContent = model
+    modelSelect.appendChild(option)
+  }
+  modelSelect.value = saved || MODELS[0]
+}
+
+function ensureModelOption(model) {
+  if (!model || [...modelSelect.options].some((option) => option.value === model)) return
+  const option = document.createElement("option")
+  option.value = model
+  option.textContent = model
+  modelSelect.appendChild(option)
+}
+
+function currentModel() {
+  return modelSelect.value || MODELS[0]
+}
+
 async function checkHealth() {
   try {
     const data = await (await fetch("/api/health")).json()
-    modelBadge.textContent = data.model || "ready"
+    if (data.model) {
+      ensureModelOption(data.model)
+      if (!localStorage.getItem(MODEL_KEY)) modelSelect.value = data.model
+    }
     if (data.configured) {
       setStatus("online", "connected")
       setupBanner.hidden = true
@@ -341,7 +578,6 @@ async function checkHealth() {
     }
   } catch {
     setStatus("offline", "backend offline")
-    modelBadge.textContent = "unavailable"
   }
 }
 
@@ -353,4 +589,23 @@ function setStatus(state, label) {
 function resizeInput() {
   input.style.height = "auto"
   input.style.height = `${Math.min(input.scrollHeight, 200)}px`
+}
+
+function isEditable(element) {
+  return Boolean(
+    element &&
+      (element.tagName === "INPUT" ||
+        element.tagName === "TEXTAREA" ||
+        element.tagName === "SELECT" ||
+        element.isContentEditable),
+  )
+}
+
+function escapeHtml(text) {
+  return String(text)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;")
 }
