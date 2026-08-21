@@ -6,6 +6,30 @@ const THEME_KEY = "opencode-web:theme:v1"
 const MODEL_KEY = "opencode-web:model:v1"
 const MODELS_KEY = "opencode-web:models:v1"
 
+const FREE_MODELS = new Set([
+  "cohere/north-mini-code:free",
+  "dots-studio/dots-3-note-preview:free",
+  "google/gemma-4-26b-a4b-it:free",
+  "google/gemma-4-31b-it:free",
+  "liquid/lfm-2.5-2.6b:free",
+  "nvidia/nemotron-3-nano-30b-a3b:free",
+  "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free",
+  "nvidia/nemotron-3-super-120b-a12b:free",
+  "nvidia/nemotron-3-ultra-550b-a55b:free",
+  "nvidia/nemotron-3.5-content-safety:free",
+  "nvidia/nemotron-3.5-lightning:free",
+  "nvidia/nemotron-nano-12b-v2-vl:free",
+  "nvidia/nemotron-nano-9b-v2:free",
+  "openai/gpt-oss-20b:free",
+  "openrouter/free",
+  "poolside/laguna-s-2.1:free",
+  "poolside/laguna-xs-2.1:free",
+  "stealth/ox-alpha",
+  "thinkingmachines/inkling-small:free",
+  "thinkingmachines/inkling:free",
+  "z-ai/glm-5.2:free",
+])
+
 const DEFAULT_MODELS = [
   "openai/gpt-4o-mini",
   "openai/gpt-4o",
@@ -21,6 +45,7 @@ const DEFAULT_MODELS = [
   "meta-llama/llama-3.3-70b-instruct",
   "qwen/qwen2.5-coder-32b-instruct",
   "mistralai/mistral-small-3.1-24b-instruct",
+  ...FREE_MODELS,
 ]
 
 const botIcon = `<svg viewBox="0 0 32 32" fill="none"><rect width="32" height="32" rx="8" fill="currentColor" opacity="0.1"/><path d="M9 12l4 4-4 4" stroke="var(--accent)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M16 20h7" stroke="var(--gold)" stroke-width="2.5" stroke-linecap="round"/></svg>`
@@ -618,9 +643,20 @@ function renderModelList() {
     const row = document.createElement("li")
     row.className = "model-row"
 
+    const left = document.createElement("div")
+    left.className = "model-row-left"
+
     const name = document.createElement("span")
     name.className = "model-row-name"
     name.textContent = model
+    left.appendChild(name)
+
+    if (FREE_MODELS.has(model)) {
+      const badge = document.createElement("span")
+      badge.className = "model-badge"
+      badge.textContent = "free"
+      left.appendChild(badge)
+    }
 
     const remove = document.createElement("button")
     remove.type = "button"
@@ -629,7 +665,7 @@ function renderModelList() {
     remove.innerHTML = `<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 3l10 10M13 3L3 13" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>`
     remove.addEventListener("click", () => removeModel(model))
 
-    row.append(name, remove)
+    row.append(left, remove)
     modelListEl.appendChild(row)
   }
 }
