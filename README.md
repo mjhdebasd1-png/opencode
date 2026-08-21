@@ -12,13 +12,13 @@ Your open-source AI coding agent, in the browser — no terminal required.
 
 ## Backend
 
-The chat backend is OpenAI-compatible and works with any provider that exposes `/chat/completions` (OpenAI, Groq, OpenRouter, Ollama, ...).
+The chat backend is OpenAI-compatible and works with any provider that exposes `/chat/completions` (OpenAI, Groq, OpenRouter, Ollama, ...). It defaults to OpenRouter.
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
 | `OPENAI_API_KEY` | — | Required. API key for the provider. |
-| `OPENAI_BASE_URL` | `https://api.openai.com/v1` | Provider base URL. |
-| `OPENAI_MODEL` | `gpt-4o-mini` | Model name. |
+| `OPENAI_BASE_URL` | `https://openrouter.ai/api/v1` | Provider base URL. |
+| `OPENAI_MODEL` | `openai/gpt-4o-mini` | Model name (any OpenRouter slug works, e.g. `meta-llama/llama-3.3-70b-instruct:free`). |
 
 ## Stack
 

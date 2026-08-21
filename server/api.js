@@ -1,5 +1,5 @@
-const DEFAULT_BASE_URL = "https://api.openai.com/v1"
-const DEFAULT_MODEL = "gpt-4o-mini"
+const DEFAULT_BASE_URL = "https://openrouter.ai/api/v1"
+const DEFAULT_MODEL = "openai/gpt-4o-mini"
 
 const MAX_BODY_BYTES = 1_000_000
 
