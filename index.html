@@ -57,6 +57,11 @@
             <span id="statusText">checking…</span>
           </button>
           <div class="footer-actions">
+            <button id="settingsBtn" class="icon-btn" type="button" title="Settings" aria-label="Settings">
+              <svg viewBox="0 0 16 16" aria-hidden="true">
+                <path d="M2 5h9M13 5h1M2 11h3M8 11h6M11 3v4M5 9v4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" />
+              </svg>
+            </button>
             <button id="themeToggle" class="icon-btn" type="button" title="Toggle theme" aria-label="Toggle theme">
               <svg class="icon-sun" viewBox="0 0 16 16" aria-hidden="true">
                 <circle cx="8" cy="8" r="3.2" fill="none" stroke="currentColor" stroke-width="1.6" />
@@ -177,6 +182,34 @@
           <p class="hint">Enter to send · Shift+Enter for a new line · opencode can make mistakes</p>
         </footer>
       </main>
+    </div>
+
+    <div id="settingsModal" class="modal-overlay" hidden>
+      <div class="modal" role="dialog" aria-modal="true" aria-labelledby="settingsTitle">
+        <div class="modal-header">
+          <h2 id="settingsTitle">Settings</h2>
+          <button id="settingsClose" class="icon-btn" type="button" aria-label="Close settings">
+            <svg viewBox="0 0 16 16" aria-hidden="true">
+              <path d="M3 3l10 10M13 3L3 13" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" />
+            </svg>
+          </button>
+        </div>
+        <div class="modal-body">
+          <section class="settings-section">
+            <h3 class="settings-heading">Models</h3>
+            <p class="settings-hint">
+              Models shown in the top-bar selector. Use full OpenRouter slugs, e.g.
+              <code>openai/gpt-4o-mini</code>.
+            </p>
+            <ul id="modelList" class="model-list"></ul>
+            <form id="addModelForm" class="add-model-form">
+              <input id="newModelInput" type="text" placeholder="openai/gpt-4o" autocomplete="off" />
+              <button type="submit" class="add-model-btn">Add model</button>
+            </form>
+            <button id="resetModels" class="reset-btn" type="button">Reset to defaults</button>
+          </section>
+        </div>
+      </div>
     </div>
 
     <script type="module" src="/src/main.js"></script>

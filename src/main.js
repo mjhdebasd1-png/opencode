@@ -4,15 +4,23 @@ import { renderMarkdown } from "./markdown.js"
 const STORAGE_KEY = "opencode-web:sessions:v1"
 const THEME_KEY = "opencode-web:theme:v1"
 const MODEL_KEY = "opencode-web:model:v1"
+const MODELS_KEY = "opencode-web:models:v1"
 
-const MODELS = [
+const DEFAULT_MODELS = [
   "openai/gpt-4o-mini",
   "openai/gpt-4o",
+  "openai/gpt-4.1",
+  "openai/o3-mini",
   "anthropic/claude-3.5-sonnet",
+  "anthropic/claude-3.7-sonnet",
   "anthropic/claude-3-5-haiku",
   "google/gemini-2.0-flash-001",
+  "google/gemini-2.5-pro",
   "deepseek/deepseek-chat",
+  "deepseek/deepseek-r1",
   "meta-llama/llama-3.3-70b-instruct",
+  "qwen/qwen2.5-coder-32b-instruct",
+  "mistralai/mistral-small-3.1-24b-instruct",
 ]
 
 const botIcon = `<svg viewBox="0 0 32 32" fill="none"><rect width="32" height="32" rx="8" fill="currentColor" opacity="0.1"/><path d="M9 12l4 4-4 4" stroke="var(--accent)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M16 20h7" stroke="var(--gold)" stroke-width="2.5" stroke-linecap="round"/></svg>`
@@ -35,6 +43,13 @@ const modelSelect = document.querySelector("#modelSelect")
 const regenerateBtn = document.querySelector("#regenerate")
 const thinking = document.querySelector("#thinking")
 const setupBanner = document.querySelector("#setupBanner")
+const settingsBtn = document.querySelector("#settingsBtn")
+const settingsModal = document.querySelector("#settingsModal")
+const settingsClose = document.querySelector("#settingsClose")
+const modelListEl = document.querySelector("#modelList")
+const addModelForm = document.querySelector("#addModelForm")
+const newModelInput = document.querySelector("#newModelInput")
+const resetModelsBtn = document.querySelector("#resetModels")
 
 let sessions = loadSessions()
 let currentId = null
@@ -45,7 +60,7 @@ init()
 
 function init() {
   applyTheme(localStorage.getItem(THEME_KEY) || (matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark"))
-  initModelSelect()
+  renderModelSelect()
 
   if (sessions.length === 0) sessions = [createSession()]
   currentId = sessions[0].id
@@ -61,6 +76,16 @@ function bindEvents() {
   sendBtn.addEventListener("click", () => sendMessage(input.value))
   newChatBtn.addEventListener("click", () => selectSession(createSession().id))
   regenerateBtn.addEventListener("click", regenerate)
+  settingsBtn.addEventListener("click", openSettings)
+  settingsClose.addEventListener("click", closeSettings)
+  settingsModal.addEventListener("click", (event) => {
+    if (event.target === settingsModal) closeSettings()
+  })
+  addModelForm.addEventListener("submit", (event) => {
+    event.preventDefault()
+    addModel(newModelInput.value)
+  })
+  resetModelsBtn.addEventListener("click", resetModels)
   themeToggle.addEventListener("click", () => {
     const next = document.documentElement.dataset.theme === "light" ? "dark" : "light"
     applyTheme(next)
@@ -91,6 +116,7 @@ function bindEvents() {
   })
 
   document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") closeSettings()
     if (event.key === "/" && !isEditable(document.activeElement)) {
       event.preventDefault()
       input.focus()
@@ -536,18 +562,32 @@ function applyTheme(theme) {
   localStorage.setItem(THEME_KEY, theme)
 }
 
-function initModelSelect() {
-  const options = new Set(MODELS)
-  const saved = localStorage.getItem(MODEL_KEY)
-  if (saved) options.add(saved)
+function getModelList() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(MODELS_KEY) || "[]")
+    if (Array.isArray(parsed) && parsed.length) return parsed
+  } catch {
+    // fall through to defaults
+  }
+  return [...DEFAULT_MODELS]
+}
 
-  for (const model of options) {
+function setModelList(models) {
+  localStorage.setItem(MODELS_KEY, JSON.stringify(models))
+}
+
+function renderModelSelect() {
+  const models = getModelList()
+  const saved = localStorage.getItem(MODEL_KEY)
+  modelSelect.innerHTML = ""
+
+  for (const model of models) {
     const option = document.createElement("option")
     option.value = model
     option.textContent = model
     modelSelect.appendChild(option)
   }
-  modelSelect.value = saved || MODELS[0]
+  modelSelect.value = models.includes(saved) ? saved : models[0]
 }
 
 function ensureModelOption(model) {
@@ -559,7 +599,70 @@ function ensureModelOption(model) {
 }
 
 function currentModel() {
-  return modelSelect.value || MODELS[0]
+  return modelSelect.value || DEFAULT_MODELS[0]
+}
+
+function openSettings() {
+  renderModelList()
+  settingsModal.hidden = false
+  newModelInput.focus()
+}
+
+function closeSettings() {
+  settingsModal.hidden = true
+}
+
+function renderModelList() {
+  modelListEl.innerHTML = ""
+  for (const model of getModelList()) {
+    const row = document.createElement("li")
+    row.className = "model-row"
+
+    const name = document.createElement("span")
+    name.className = "model-row-name"
+    name.textContent = model
+
+    const remove = document.createElement("button")
+    remove.type = "button"
+    remove.className = "model-remove"
+    remove.title = "Remove model"
+    remove.innerHTML = `<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 3l10 10M13 3L3 13" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>`
+    remove.addEventListener("click", () => removeModel(model))
+
+    row.append(name, remove)
+    modelListEl.appendChild(row)
+  }
+}
+
+function addModel(value) {
+  const model = value.trim()
+  if (!model) return
+  const models = getModelList()
+  if (models.includes(model)) {
+    newModelInput.value = ""
+    return
+  }
+  models.push(model)
+  setModelList(models)
+  newModelInput.value = ""
+  renderModelSelect()
+  renderModelList()
+}
+
+function removeModel(model) {
+  const remaining = getModelList().filter((item) => item !== model)
+  const models = remaining.length ? remaining : [...DEFAULT_MODELS]
+  setModelList(models)
+  if (localStorage.getItem(MODEL_KEY) === model) localStorage.removeItem(MODEL_KEY)
+  renderModelSelect()
+  renderModelList()
+}
+
+function resetModels() {
+  setModelList([...DEFAULT_MODELS])
+  localStorage.removeItem(MODEL_KEY)
+  renderModelSelect()
+  renderModelList()
 }
 
 async function checkHealth() {
