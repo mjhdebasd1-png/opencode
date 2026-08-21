@@ -1,0 +1,176 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="Opencode — your open-source AI coding agent, now in the browser. No terminal required."
+    />
+    <title>Opencode — AI coding agent in the browser</title>
+    <link
+      rel="icon"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%2313161c'/%3E%3Cpath d='M9 12l4 4-4 4' fill='none' stroke='%234ade80' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3Cpath d='M16 20h7' stroke='%23e7c07a' stroke-width='2.5' stroke-linecap='round'/%3E%3C/svg%3E"
+    />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap"
+      rel="stylesheet"
+    />
+  </head>
+  <body>
+    <div class="app">
+      <aside class="sidebar">
+        <div class="brand">
+          <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true">
+            <rect width="32" height="32" rx="8" fill="var(--surface-2)" />
+            <path
+              d="M9 12l4 4-4 4"
+              fill="none"
+              stroke="var(--accent)"
+              stroke-width="2.5"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            />
+            <path d="M16 20h7" stroke="var(--gold)" stroke-width="2.5" stroke-linecap="round" />
+          </svg>
+          <div class="brand-text">
+            <span class="brand-name">opencode</span>
+            <span class="brand-tag">web</span>
+          </div>
+        </div>
+
+        <button id="newChat" class="new-chat" type="button">
+          <svg viewBox="0 0 16 16" aria-hidden="true">
+            <path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
+          </svg>
+          New chat
+        </button>
+
+        <div class="session-heading">Conversations</div>
+        <nav id="sessionList" class="session-list" aria-label="Conversations"></nav>
+
+        <div class="sidebar-footer">
+          <button id="statusBadge" class="status" type="button" title="Backend status">
+            <span id="statusDot" class="status-dot"></span>
+            <span id="statusText">checking…</span>
+          </button>
+          <div class="footer-actions">
+            <button id="themeToggle" class="icon-btn" type="button" title="Toggle theme" aria-label="Toggle theme">
+              <svg class="icon-sun" viewBox="0 0 16 16" aria-hidden="true">
+                <circle cx="8" cy="8" r="3.2" fill="none" stroke="currentColor" stroke-width="1.6" />
+                <path
+                  d="M8 1.2v1.4M8 13.4v1.4M1.2 8h1.4M13.4 8h1.4M3.2 3.2l1 1M11.8 11.8l1 1M12.8 3.2l-1 1M4.2 11.8l-1 1"
+                  stroke="currentColor"
+                  stroke-width="1.6"
+                  stroke-linecap="round"
+                />
+              </svg>
+              <svg class="icon-moon" viewBox="0 0 16 16" aria-hidden="true">
+                <path
+                  d="M13.4 9.4A5.5 5.5 0 0 1 6.6 2.6a5.5 5.5 0 1 0 6.8 6.8Z"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.6"
+                  stroke-linejoin="round"
+                />
+              </svg>
+            </button>
+            <button id="clearAll" class="icon-btn" type="button" title="Clear all chats" aria-label="Clear all chats">
+              <svg viewBox="0 0 16 16" aria-hidden="true">
+                <path
+                  d="M2.5 4.5h11M6.5 4.5V3a1 1 0 0 1 1-1h1a1 1 0 0 1 1 1v1.5M4 4.5l.6 8a1 1 0 0 0 1 .9h4.8a1 1 0 0 0 1-.9l.6-8"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.5"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                />
+              </svg>
+            </button>
+          </div>
+        </div>
+      </aside>
+
+      <main class="main">
+        <header class="topbar">
+          <h1 id="sessionTitle" class="session-title">New conversation</h1>
+          <span id="modelBadge" class="badge">connecting…</span>
+        </header>
+
+        <section id="messages" class="messages" aria-live="polite">
+          <div id="emptyState" class="empty">
+            <div class="empty-inner">
+              <svg class="empty-mark" viewBox="0 0 32 32" aria-hidden="true">
+                <rect width="32" height="32" rx="8" fill="var(--surface-2)" />
+                <path
+                  d="M9 12l4 4-4 4"
+                  fill="none"
+                  stroke="var(--accent)"
+                  stroke-width="2.5"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                />
+                <path d="M16 20h7" stroke="var(--gold)" stroke-width="2.5" stroke-linecap="round" />
+              </svg>
+              <p class="empty-eyebrow">No terminal required</p>
+              <h2 class="empty-title">Your AI coding agent,<br />now in the browser.</h2>
+              <p class="empty-sub">
+                Ask opencode to explain, design, debug, or write code — right here in a tab.
+              </p>
+              <div class="suggestions" id="suggestions">
+                <button class="suggestion" type="button" data-prompt="Explain how a Vite dev server middleware works and when to use it.">
+                  Explain Vite middleware
+                </button>
+                <button class="suggestion" type="button" data-prompt="Write a small Express-style router in plain JavaScript with no dependencies.">
+                  Write a dependency-free router
+                </button>
+                <button class="suggestion" type="button" data-prompt="Review this idea and suggest a clean architecture for a browser-based coding assistant.">
+                  Architect a coding assistant
+                </button>
+                <button class="suggestion" type="button" data-prompt="Show me how to stream an OpenAI-compatible response with fetch and Server-Sent Events.">
+                  Stream an LLM response
+                </button>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <footer class="composer-wrap">
+          <div id="setupBanner" class="setup-banner" hidden>
+            <span>
+              The backend has no API key yet. Add <code>OPENAI_API_KEY</code> to your environment to
+              start chatting.
+            </span>
+          </div>
+          <div class="composer">
+            <textarea
+              id="input"
+              rows="1"
+              placeholder="Ask opencode anything…"
+              aria-label="Message"
+            ></textarea>
+            <div class="composer-actions">
+              <button id="stop" class="stop-btn" type="button" hidden>Stop</button>
+              <button id="send" class="send-btn" type="button" aria-label="Send message">
+                <svg viewBox="0 0 16 16" aria-hidden="true">
+                  <path
+                    d="M2 8l12-6-4.5 12L7 9 2 8Z"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.6"
+                    stroke-linejoin="round"
+                  />
+                </svg>
+              </button>
+            </div>
+          </div>
+          <p class="hint">Enter to send · Shift+Enter for a new line · opencode can make mistakes</p>
+        </footer>
+      </main>
+    </div>
+
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
